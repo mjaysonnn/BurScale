@@ -17,10 +17,15 @@ a = 1.03
 zeta = sum(1/n**a for n in range(1, N+1))
 def generate_keys():
     global keys, hotCount
-    for i in range(N):
-        key = ''.join([choice(string.ascii_uppercase + string.digits) for n in range(KEY_SIZE)])
+    for _ in range(N):
+        key = ''.join(
+            [
+                choice(string.ascii_uppercase + string.digits)
+                for _ in range(KEY_SIZE)
+            ]
+        )
         if hotCount < N*0.2:
-            key = 'h' + key
+            key = f'h{key}'
             hotCount +=1
         keys.append(key)
     with open("keys", "wb") as kf:

@@ -34,12 +34,18 @@ def launch_instances(num, vmtype="m5.large"):
     req.mount('http://', HTTPAdapter(max_retries=retries))
     for i in range(num):
         logger.info("====================================================")
-        logger.info("Starded launching instance number {}".format(i))
+        logger.info(f"Starded launching instance number {i}")
         inst_id = create_instance(num=1, vmtype=vmtype)[0]
         logger.info("instance number {0} has instance id {1}".format(i, inst_id))
         while client.Instance(inst_id).state['Code'] !=16:
             sleep(0.1)
-        while req.get("http://"+client.Instance(inst_id).public_dns_name, timeout=50).status_code !=200:
+        while (
+            req.get(
+                f"http://{client.Instance(inst_id).public_dns_name}",
+                timeout=50,
+            ).status_code
+            != 200
+        ):
             sleep(1)
         logger.info("Launched instance {0} with instance id {1} to LB: ".format(i,inst_id))
 
@@ -58,13 +64,19 @@ def start_instances():
     logger.info("Starting instances...")
     for inst_id in stopped_instances:
         logger.info("#############################################################")
-        logger.info("Started starting instance {}".format(inst_id))
+        logger.info(f"Started starting instance {inst_id}")
         start_instance(inst_id)
         while client.Instance(inst_id).state['Code'] !=16:
             sleep(0.1)
-        while req.get("http://"+client.Instance(inst_id).public_dns_name, timeout=50).status_code !=200:
+        while (
+            req.get(
+                f"http://{client.Instance(inst_id).public_dns_name}",
+                timeout=50,
+            ).status_code
+            != 200
+        ):
             sleep(1)
-        logger.info("Started instance with instance id {} to LB: ".format(inst_id))
+        logger.info(f"Started instance with instance id {inst_id} to LB: ")
         sleep(2)
 
 

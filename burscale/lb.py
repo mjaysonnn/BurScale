@@ -6,10 +6,9 @@ def add_worker_to_lb(balancer_id, lb_url, vm):
     The attr_dict must contain backup and down attrs and both should be set to false
     weight attr also is in this data structure and default value is 1
     '''
-    uri = "/balancers/"+balancer_id+"/servers/new"
+    uri = f"/balancers/{balancer_id}/servers/new"
     URL = lb_url + uri
-    data = {}
-    data["settings.address"] = vm.get_instance_ip()
+    data = {"settings.address": vm.get_instance_ip()}
     print(data)
     data["label"] = vm.get_instance_id()
     print(data)
@@ -29,8 +28,7 @@ def add_worker_to_lb(balancer_id, lb_url, vm):
         try:
             json_data = json.load(json_file)
         except:
-            json_data = {}
-            json_data['workers'] = []
+            json_data = {'workers': []}
         json_data['workers'].append(vm.__dict__)
 
     with open('workers.json', 'w') as json_file:
@@ -46,7 +44,7 @@ def update_worker_attribute(lb_url,vm, attr_dict={}):
     settings.weight: integer value for wieght
     settings.availability: available, backup, unavailable
     '''
-    uri = "/servers/"+vm.get_worker_id()+"/edit"
+    uri = f"/servers/{vm.get_worker_id()}/edit"
     URL = lb_url + uri
     data = attr_dict
     data["settings.address"] = vm.get_instance_ip()
@@ -69,7 +67,7 @@ def get_vm_status(vm, stat):
     -SettingsAvailability
     -SettingsWeight
     '''
-    uri = "/servers/"+vm.get_worker_id()+"/status"
+    uri = f"/servers/{vm.get_worker_id()}/status"
     r = requests.get(URL)
     return json.loads(r.text)[stat]
 
@@ -80,7 +78,7 @@ def change_lb_method(lb_method):
     -least-connections
     -source-ip
     '''
-    uri = "/balancers/"+balancer_id+"/edit"
+    uri = f"/balancers/{balancer_id}/edit"
     URL = lb_url+uri
     data = {"label":balancer_label, "settings.hostname":balancer_host_name, "settings.port":80, "settings.protocol":"http", "settings.algorithm":lb_method}
 

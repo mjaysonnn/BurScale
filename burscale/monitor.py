@@ -6,7 +6,7 @@ URI = "/basic_status"''
 perv_val = 0
 
 def calc_arrival_rate(lb_url, duration):
-    res = requests.get("http://"+lb_url + URI).text.split()
+    res = requests.get(f"http://{lb_url}{URI}").text.split()
     curr_val = int(res[res.index("Reading:")-1])
     global perv_val
     reqs = curr_val - perv_val - 1
