@@ -39,7 +39,7 @@ balancer_id = config['balancer_id']
 balancer_label = config['balancer_label']
 balancer_host_name = config['balancer_host_name']
 region_name = config['region_name']
-lb_url = 'http://'+balancer_host_name+':26590'
+lb_url = f'http://{balancer_host_name}:26590'
 
 
 
@@ -108,20 +108,26 @@ def bring_procurements():
         attacher.join()
 
 def bring_new_resource(num, vmtype=regtype, addToWorkers=True):
-    logger.info("Requested {} instances".format(num))
+    logger.info(f"Requested {num} instances")
     global image_id, az, sg, snid, key_name, region_name
     iids = create_instance(num=num, vmtype=vmtype, image_id=image_id, az=az, sg=sg, snid=snid, key_name=key_name)
-    logger.info("Got {} instances".format(num))
+    logger.info(f"Got {num} instances")
     client = boto3.resource('ec2', region_name=region_name)
     attachers = []
     req = requests.Session()
     retries = Retry(total=15, backoff_factor=0.1, status_forcelist=[ 500, 502, 503, 504 ])
     req.mount('http://', HTTPAdapter(max_retries=retries))
     for inst_id in iids:
-        logger.info("Starded adding instance {}".format(inst_id))
+        logger.info(f"Starded adding instance {inst_id}")
         while client.Instance(inst_id).state['Code'] !=16:
             sleep(0.1)
-        while req.get("http://"+client.Instance(inst_id).public_dns_name, timeout=50).status_code !=200:
+        while (
+            req.get(
+                f"http://{client.Instance(inst_id).public_dns_name}",
+                timeout=50,
+            ).status_code
+            != 200
+        ):
             sleep(1)
         vm = VM(inst_id)
         vm.set_weight(1)
@@ -140,7 +146,7 @@ def bring_new_resource(num, vmtype=regtype, addToWorkers=True):
 
         attacher = LBAttacher(vm)
         attacher.start()
-        logger.info("Added instance {} to LB: ".format(inst_id))
+        logger.info(f"Added instance {inst_id} to LB: ")
         attachers.append(attacher)
     for attacher in attachers:
         attacher.join()
@@ -149,68 +155,68 @@ def remove_workers(num, vmtype):
     '''
     vmtype is either od or b
     '''
-    if num > 0:
-        if vmtype == "od" and num < len(od_workers):
-            detachers = []
-            for i in range(num):
-                odLock.acquire()
-                vm = od_workers.pop()
-                odLock.release()
-                detacher = LBDetacher(vm)
-                detacher.start()
-                detachers.append(detacher)
-                logger.info("Removed instance {} from LB: ".format(vm.get_instance_id()))
-            for detacher in detachers:
-                detacher.join()
-        elif vmtype == "b" and num < len(b_workers):
-            detachers = []
-            for i in range(num):
-                bLock.acquire()
-                vm = b_workers.pop()
-                bLock.release()
-                detacher = LBDetacher(vm)
-                detacher.start()
-                detachers.append(detacher)
-                logger.info("Removed instance {} from LB: ".format(vm.get_instance_id()))
-            for detacher in detachers:
-                detacher.join()
+    if num <= 0:
+        return
+    if vmtype == "od" and num < len(od_workers):
+        detachers = []
+        for _ in range(num):
+            odLock.acquire()
+            vm = od_workers.pop()
+            odLock.release()
+            detacher = LBDetacher(vm)
+            detacher.start()
+            detachers.append(detacher)
+            logger.info(f"Removed instance {vm.get_instance_id()} from LB: ")
+        for detacher in detachers:
+            detacher.join()
+    elif vmtype == "b" and num < len(b_workers):
+        detachers = []
+        for _ in range(num):
+            bLock.acquire()
+            vm = b_workers.pop()
+            bLock.release()
+            detacher = LBDetacher(vm)
+            detacher.start()
+            detachers.append(detacher)
+            logger.info(f"Removed instance {vm.get_instance_id()} from LB: ")
+        for detacher in detachers:
+            detacher.join()
 
 
 if (__name__=='__main__'):
-        bring_new_resource(num=init)
-        logger.info("BurScale Started")
-        od_excess = 0
-        b_excess = 0
-        excess_window = []
-        while True:
-            rate  = calc_arrival_rate(balancer_host_name, duration)
-            od_k = len(od_workers)
-            b_k = len(b_workers)
-            R = ceil(rate/mu)
-            od_excess = R  - od_k
-            b_excess = scale(rate, mu) - R - b_k
-            if od_excess > 0:
-                Thread(target = bring_new_resource, args = (od_excess , regtype, True) ).start()
-            elif od_excess < 0 :
-                Thread(target=remove_workers, args=(abs(od_excess), "od")).start()
+    bring_new_resource(num=init)
+    logger.info("BurScale Started")
+    od_excess = 0
+    b_excess = 0
+    excess_window = []
+    while True:
+        rate  = calc_arrival_rate(balancer_host_name, duration)
+        od_k = len(od_workers)
+        b_k = len(b_workers)
+        R = ceil(rate/mu)
+        od_excess = R  - od_k
+        b_excess = scale(rate, mu) - R - b_k
+        if od_excess > 0:
+            Thread(target = bring_new_resource, args = (od_excess , regtype, True) ).start()
+        elif od_excess < 0 :
+            Thread(target=remove_workers, args=(abs(od_excess), "od")).start()
 
-            if b_excess > 0:
-                Thread(target = bring_new_resource, args = (b_excess , btype,True) ).start()
-            elif b_excess < 0 :
-                Thread(target=remove_workers, args=(abs(b_excess), "b")).start()
+        if b_excess > 0:
+            Thread(target = bring_new_resource, args = (b_excess , btype,True) ).start()
+        elif b_excess < 0 :
+            Thread(target=remove_workers, args=(abs(b_excess), "b")).start()
 
-            excess_window.append(od_excess + b_excess)
+        excess_window.append(od_excess + b_excess)
 
-            if len(excess_window) >= 3 and sum(excess_window[-3:] <= 1):
-                bi = b_workers[0]
-                default_weight = get_curr_weight(default_weight, baseline, bi)
-                for oi in od_workers:
-                    oi.set_weight(default_weight)
-                    Thread(target=update_worker_attribute, args=(lb_url, oi, {})).start()
-            else:
-                if od_workers[0].get_weight() !=1:
-                    for oi in od_workers:
-                        oi.set_weight(1)
-                        Thread(target=update_worker_attribute, args=(lb_url, oi, {})).start()
+        if len(excess_window) >= 3 and sum(excess_window[-3:] <= 1):
+            bi = b_workers[0]
+            default_weight = get_curr_weight(default_weight, baseline, bi)
+            for oi in od_workers:
+                oi.set_weight(default_weight)
+                Thread(target=update_worker_attribute, args=(lb_url, oi, {})).start()
+        elif od_workers[0].get_weight() !=1:
+            for oi in od_workers:
+                oi.set_weight(1)
+                Thread(target=update_worker_attribute, args=(lb_url, oi, {})).start()
 
-            time.sleep(duration)
+        time.sleep(duration)
